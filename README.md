@@ -1,0 +1,2 @@
+# bitrader
+Bitcoin Arbitrage utilities

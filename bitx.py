@@ -1,3 +1,8 @@
+"""Code I found here: https://github.com/CjS77/pybitx
+ There is issue with code, so I copied and fixed. TODO: Create proper fix and
+ pull request.
+"""
+
 import requests
 import logging
 from concurrent.futures import ThreadPoolExecutor

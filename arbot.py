@@ -11,7 +11,7 @@ load_dotenv('.env')
 telegram_bot = os.environ.get('TELEGRAM_TOKEN')
 
 try:
-    bot = telebot.TeleBot(telgram_bot)
+    bot = telebot.TeleBot(telegram_bot)
 except:
     print('Sorry, bad or missing bot key')
 

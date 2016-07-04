@@ -8,7 +8,7 @@ from arbitrage_tools import *
 
 getcontext().prec = 8
 load_dotenv('.env')
-telegram_bot = os.environ.get('TELEGRAM_BOT')
+telegram_bot = os.environ.get('TELEGRAM_TOKEN')
 
 try:
     bot = telebot.TeleBot(telgram_bot)
@@ -21,6 +21,7 @@ def send_welcome(message):
     bot.reply_to(message, """Howdy, how are you doing?
 I'm arbot and I simulate Bitcoin arbitrage plays.
 Type /arbitrage to run a simulation""")
+
 
 # Handle '/start' and '/help'
 @bot.message_handler(commands=['arbitrage'])

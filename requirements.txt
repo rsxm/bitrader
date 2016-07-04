@@ -1,0 +1,9 @@
+python-dotenv
+requests
+pandas
+pyTelegramBotAPI
+git+https://github.com/veox/python3-krakenex.git
+notebook
+html5lib
+lxml
+BeautifulSoup4

@@ -25,7 +25,7 @@ def get_forex_buy_quote(currency_code: str = 'EUR', source: str ='FNB'):
         df = tables[0]
         exhange_rate = df.loc[currency_code, 'Bank Selling Rate']
 
-        return Decimal("%.4f" % exhange_rate)
+        return Decimal("%.4f" % float(exhange_rate))
 
 
 def kraken_order_book(book_type: str, currency_code: str = 'EUR'):
@@ -97,7 +97,7 @@ def bitcoin_exchange(df, limit, order_type: str, bitcoin_column: str = 'volume',
         'sell': {'from': bitcoin_column, 'to': currency_column}
     }
 
-    filtered = df.loc[df['cumulative_%s' % options[order_type]['from']] < limit, :]
+    filtered = df.loc[df['cumulative_%s' % options[order_type]['from']] < float(limit), :]
     rows = filtered.shape[0]
 
     over = Decimal(df.loc[rows, 'cumulative_%s' % options[order_type]['from']]) - limit

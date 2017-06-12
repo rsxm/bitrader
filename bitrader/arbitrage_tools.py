@@ -3,9 +3,10 @@
 Tools for determining the
 
 """
-import pandas as pd
 import os
 from decimal import Decimal
+
+import pandas as pd
 
 KRAKEN_API_KEY = os.environ.get('KRAKEN_API_KEY')
 KRAKEN_PRIVATE_KEY = os.environ.get('KRAKEN_PRIVATE_KEY')
@@ -28,7 +29,7 @@ def get_forex_buy_quote(currency_code: str = 'EUR', source: str ='FNB'):
         return Decimal("%.4f" % float(exhange_rate))
 
 
-def kraken_order_book(book_type: str, currency_code: str = 'EUR'):
+def kraken_order_book(book_type: str, currency_code: str = 'EUR', coin_code: str = 'XBT'):
     """Kraken specific orderbook retrieval
 
     """
@@ -36,7 +37,7 @@ def kraken_order_book(book_type: str, currency_code: str = 'EUR'):
 
     kraken_api = krakenex.API(key=KRAKEN_API_KEY, secret=KRAKEN_PRIVATE_KEY, conn=krakenex.Connection())
 
-    pair = 'XXBTZ' + currency_code
+    pair = f'X{coin_code}Z{currency_code}'
     orders = kraken_api.query_public('Depth', {'pair': pair})
 
     df = pd.DataFrame(
@@ -49,12 +50,30 @@ def kraken_order_book(book_type: str, currency_code: str = 'EUR'):
 def bitx_order_book(book_type: str, currency_code: str = 'ZAR'):
     """BitX specific orderbook retrieval
     """
-    import bitx
+    from bitrader import bitx
 
     bitx_api = bitx.BitX(BITX_KEY, BITX_SECRET)
     df = bitx_api.get_order_book_frame()
 
     return df[book_type]
+
+
+def ice3x_order_book(book_type: str, currency_code: str = 'ZAR'):
+    """Ice3X specific orderbook retrieval
+    """
+    from bitrader.api_tools import Ice3xAPI
+    ice = Ice3xAPI(cache=False, future=False)
+
+    r = ice.get_resource(
+        'generic',
+        api_method='orderbook',
+        api_action='info',
+        api_params=f'type={book_type}&pair_id=6',
+        data_format='raw')
+
+    bids = pd.DataFrame(r['response'].json()['response']['entities'])
+
+    return bids
 
 
 def prepare_order_book(order_book, book_type: str, bitcoin_column: str = 'volume', currency_column: str = 'price'):
@@ -113,7 +132,10 @@ def bitcoin_exchange(df, limit, order_type: str, bitcoin_column: str = 'volume',
     return result
 
 
-def simulate(transfer_amount, asks, bids, exchange_rate=None, transfer_fees: bool = True, verbose: bool = True):
+def simulate(transfer_amount, asks, bids,
+             coin_name: str = 'Bitcoin', coin_code: str = 'BTC', exchange_name: str = 'Luno',
+             exchange_rate=None,
+             transfer_fees: bool = True, verbose: bool = True):
     """ Calculate the arbitrage oppertunity
 
     """
@@ -162,16 +184,16 @@ def simulate(transfer_amount, asks, bids, exchange_rate=None, transfer_fees: boo
     response.append('# forex conversion: R%.2f' % float(_swift_fee + _fnb_comission))
     response.append('Euro: %.2f' % euros)
     response.append('# kraken fee: R%.2f' % float((_kraken_fee + _kraken_deposit_fee) * exchange_rate ))
-    response.append('Bitcoins: %.8f' % bitcoins)
-    response.append('# bitx fee: R%.2f' % (_bitx_fees*btc_zar_exchange_rate + _bitx_withdrawel_fee))
+    response.append('%s: %.8f' % (coin_name, bitcoins))
+    response.append('# %s fee: R%.2f' % (exchange_name, (_bitx_fees*btc_zar_exchange_rate + _bitx_withdrawel_fee)))
     response.append('Rands in: %.2f' % rands)
     response.append('--------------------')
     response.append('Profit: %.2f' % (return_value - capital))
     response.append('ROI: %.2f' % (((return_value - capital)/capital)*100))
     response.append('--------------------')
     response.append('ZAR/EUR: %.2f' % exchange_rate)
-    response.append('EUR/BTC: %.2f' % ((euros - _kraken_fee)/bitcoins))
-    response.append('BTC/ZAR: %.2f' % btc_zar_exchange_rate)
+    response.append('EUR/%s: %.2f' % (coin_code, (euros - _kraken_fee)/bitcoins))
+    response.append('%s/ZAR: %.2f' % (coin_code, btc_zar_exchange_rate))
 
     if verbose:
         print('\n'.join(response))

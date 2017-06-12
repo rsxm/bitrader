@@ -2,7 +2,7 @@
 BITRADER
 ========
 
-Bitcoin Arbitrage utilities. Jupyter notebook and Telegram bot included for free!
+Bitcoin Arbitrage utilities. Telegram bot included for free!
 
 Quickstart
 ==========
@@ -24,8 +24,8 @@ Quickstart
 --------------------
 
 - Get your Telegram Bot token: https://core.telegram.org/bots#3-how-do-i-create-a-bot
-- Sign up with [Kraken](https://www.kraken.com) and get your API key under Settings -> API
-- Do the same for [BitX](https://www.bitx.co)
+- Sign up with `Kraken <https://www.kraken.com>`_ and get your API key under Settings > API.
+- Do the same for `Luno <https://www.luno.com>`_.
 
 Edit the .env file and add all the relevant keys and tokens as indicated by the example .env file.
 

@@ -16,8 +16,8 @@ Quickstart
     cd bitrader
     python3 -m venv venv
     source venv/bin/activate
-    pip install -r requirements.txt
-    cp example.env .env
+    pip install -e .
+    cp .env-example .env
 
 
 2. Configure secrets
@@ -34,9 +34,9 @@ Edit the .env file and add all the relevant keys and tokens as indicated by the 
 
 .. code-block:: bash
 
-    python arbot.py
+    arbot
 
-Then type /start in chat with your brand new Bitcoin Arbitrage bot.
+No parameters needed! Then type /start in chat with your brand new Bitcoin Arbitrage bot.
 
 4. Profit!!!
 ------------

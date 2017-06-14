@@ -190,4 +190,5 @@ class Ice3xAPI(BaseAPI):
 pair_ids = [{'pair_id': '3', 'pair_name': 'btc/zar', },
      {'pair_id': '4', 'pair_name': 'btc/ngn', },
      {'pair_id': '6', 'pair_name': 'ltc/zar', },
-     {'pair_id': '7', 'pair_name': 'ltc/ngn', },]
+     {'pair_id': '7', 'pair_name': 'ltc/ngn', },
+     {'pair_id': '11', 'pair_name': 'eth/zar', },]

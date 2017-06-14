@@ -14,7 +14,7 @@ BITX_KEY = os.environ.get('BITX_KEY')
 BITX_SECRET = os.environ.get('BITX_SECRET')
 
 
-def get_forex_buy_quote(currency_code: str = 'EUR', source: str ='FNB'):
+def get_forex_buy_quote(currency_code: str = 'EUR', source: str = 'FNB'):
     """Get latest forex from FNB website
 
     """
@@ -58,17 +58,24 @@ def bitx_order_book(book_type: str, currency_code: str = 'ZAR'):
     return df[book_type]
 
 
-def ice3x_order_book(book_type: str, currency_code: str = 'ZAR'):
+def ice3x_order_book(book_type: str, coin_code: str = 'BTC', currency_code: str = 'ZAR'):
     """Ice3X specific orderbook retrieval
     """
     from bitrader.api_tools import Ice3xAPI
     ice = Ice3xAPI(cache=False, future=False)
 
+    pair_map = {
+        'BTC': 3,
+        'LTC': 6,
+        'ETH': 11,
+    }
+    pair_id = pair_map[coin_code]
+
     r = ice.get_resource(
         'generic',
         api_method='orderbook',
         api_action='info',
-        api_params=f'type={book_type}&pair_id=6',
+        api_params=f'type={book_type}&pair_id={pair_id}',
         data_format='raw')
 
     bids = pd.DataFrame(r['response'].json()['response']['entities'])
@@ -102,7 +109,7 @@ def prepare_order_book(order_book, book_type: str, bitcoin_column: str = 'volume
     return df
 
 
-def bitcoin_exchange(df, limit, order_type: str, bitcoin_column: str = 'volume', currency_column: str = 'value'):
+def coin_exchange(df, limit, order_type: str, bitcoin_column: str = 'volume', currency_column: str = 'value'):
     """Convert specified amount of bitcoin to currency or currency to bitcoin
 
     :param: order_type buy or sell
@@ -112,7 +119,7 @@ def bitcoin_exchange(df, limit, order_type: str, bitcoin_column: str = 'volume',
     """
 
     options = {
-         'buy': {'from': currency_column, 'to': bitcoin_column},
+        'buy': {'from': currency_column, 'to': bitcoin_column},
         'sell': {'from': bitcoin_column, 'to': currency_column}
     }
 
@@ -157,7 +164,7 @@ def simulate(transfer_amount, asks, bids,
     euros = transfer_amount / exchange_rate - _kraken_deposit_fee
     _kraken_fee = euros * Decimal(0.0026)
 
-    bitcoins = bitcoin_exchange(asks, euros - _kraken_fee, 'buy')
+    bitcoins = coin_exchange(asks, euros - _kraken_fee, 'buy')
     _bitx_fees = bitcoins * Decimal(0.01)
 
     if transfer_fees:
@@ -165,7 +172,7 @@ def simulate(transfer_amount, asks, bids,
     else:
         _bitx_withdrawel_fee = Decimal(0)
 
-    rands = bitcoin_exchange(bids, bitcoins - _bitx_fees, 'sell')
+    rands = coin_exchange(bids, bitcoins - _bitx_fees, 'sell')
 
     btc_zar_exchange_rate = rands / (bitcoins - _bitx_fees)
 
@@ -183,19 +190,19 @@ def simulate(transfer_amount, asks, bids,
     response.append('Rands out: %.2f' % capital)
     response.append('# forex conversion: R%.2f' % float(_swift_fee + _fnb_comission))
     response.append('Euro: %.2f' % euros)
-    response.append('# kraken fee: R%.2f' % float((_kraken_fee + _kraken_deposit_fee) * exchange_rate ))
+    response.append('# kraken fee: R%.2f' % float((_kraken_fee + _kraken_deposit_fee) * exchange_rate))
     response.append('%s: %.8f' % (coin_name, bitcoins))
-    response.append('# %s fee: R%.2f' % (exchange_name, (_bitx_fees*btc_zar_exchange_rate + _bitx_withdrawel_fee)))
+    response.append('# %s fee: R%.2f' % (exchange_name, (_bitx_fees * btc_zar_exchange_rate + _bitx_withdrawel_fee)))
     response.append('Rands in: %.2f' % rands)
     response.append('--------------------')
     response.append('Profit: %.2f' % (return_value - capital))
-    response.append('ROI: %.2f' % (((return_value - capital)/capital)*100))
+    response.append('ROI: %.2f' % (((return_value - capital) / capital) * 100))
     response.append('--------------------')
     response.append('ZAR/EUR: %.2f' % exchange_rate)
-    response.append('EUR/%s: %.2f' % (coin_code, (euros - _kraken_fee)/bitcoins))
+    response.append('EUR/%s: %.2f' % (coin_code, (euros - _kraken_fee) / bitcoins))
     response.append('%s/ZAR: %.2f' % (coin_code, btc_zar_exchange_rate))
 
     if verbose:
         print('\n'.join(response))
 
-    return {'roi': ((return_value - capital)/capital)*100, 'summary': '\n'.join(response) }
+    return {'roi': ((return_value - capital) / capital) * 100, 'summary': '\n'.join(response)}

@@ -25,7 +25,7 @@ setup(
     # use_scm_version={
     #     'write_to': 'src/static/version.txt',
     # },
-    version='1.0.0',
+    version='0.9.1',
 
     description=(
         "Bitcoin Arbitrage tools"

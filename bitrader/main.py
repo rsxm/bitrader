@@ -1,144 +1,81 @@
+import asyncio
 import os
-from decimal import Decimal, getcontext
-from functools import partial
+from decimal import getcontext
 
-import telebot
+import telepot
+import telepot.aio
 from dotenv import load_dotenv
+from telepot.aio.loop import MessageLoop
+from telepot.namedtuple import KeyboardButton, ReplyKeyboardMarkup, ReplyKeyboardRemove
 
-from bitrader.arbitrage_tools import (
-    bitx_order_book, kraken_order_book, prepare_order_book, simulate, ice3x_order_book)
+from bitrader.arbitrage_tools import COIN_MAP, arbitrage
 
-getcontext().prec = 8
-load_dotenv('.env')
-telegram_bot = os.environ.get('TELEGRAM_TOKEN')
+"""
+Main loop for Bitcoin arbitrage.
+"""
 
-bot = telebot.TeleBot(telegram_bot)
-
-
-@bot.message_handler(commands=['start', 'help'])
-def send_welcome(message):
-    bot.reply_to(message, """Howdy, how are you doing?
-I'm arbot and I simulate Bitcoin arbitrage plays.
-Type /arbitrage, /arbilite /arbieth to run a simulation""")
+coin_type = 'bitcoin'
 
 
-# Handle '/start' and '/help'
-@bot.message_handler(commands=['arbitrage'])
-def send_welcome(message):
-    msg = bot.reply_to(message, "How much do you want to simulate (in ZAR)?")
-    bot.register_next_step_handler(msg, arbitrage)
+async def on_chat_message(msg):
+    content_type, chat_type, chat_id = telepot.glance(msg)
+    print('Chat:', content_type, chat_type, chat_id)
 
+    if content_type != 'text':
+        return
 
-# Handle '/arbilite'
-@bot.message_handler(commands=['arbilite'])
-def arbilite(message):
-    msg = bot.reply_to(message, "How much do you want to simulate (in ZAR)?")
-    bot.register_next_step_handler(msg, arbitrage_lite)
-
-
-# Handle '/arbieth'
-@bot.message_handler(commands=['arbieth'])
-def arbieth(message):
-    msg = bot.reply_to(message, "How much do you want to simulate (in ZAR)?")
-    bot.register_next_step_handler(msg, arbitrage_eth)
-
-
-# @bot.message_handler(commands=['arbitrage'])
-def arbitrage(message):
-    chat_id = message.chat.id
-
-    kraken_asks = prepare_order_book(kraken_order_book('asks'), 'asks')
-    bitx_bids = prepare_order_book(bitx_order_book('bids'), 'bids')
+    command = msg['text'].lower()
+    amount = 0
 
     try:
-        transfer_amount = Decimal(message.text)
-    except:
-        transfer_amount = 0
-        bot.reply_to(message, 'Sorry, could not read reply.')
+        amount = int(command)
+    except ValueError:
+        pass
 
-    currency_exchange_rate = Decimal(16.711)
+    # markup = ReplyKeyboardRemove()
+    # await bot.sendMessage(chat_id, command, reply_markup=markup)
 
-    new = True
+    if command == '/start':
+        markup = ReplyKeyboardMarkup(keyboard=[
+            [KeyboardButton(text='Bitcoin'),
+             KeyboardButton(text='Litecoin')],
+            [KeyboardButton(text='Ethereum')],
+        ])
+        # await bot.sendMessage(chat_id, 'Pick coin from options in keyboard:', reply_markup=markup)
+        await bot.sendMessage(
+            chat_id, 'Pick coin from options in keyboard:',
+            reply_markup=markup)
 
-    try:
-        if new:
-            response = simulate(transfer_amount, kraken_asks, bitx_bids, transfer_fees=True)
-        else:
-            response = simulate(
-                transfer_amount, kraken_asks, bitx_bids, exchange_rate=currency_exchange_rate, transfer_fees=False)
+    elif command in ['bitcoin', 'litecoin', 'ethereum']:
+        global coin_type
+        coin_type = command
+        markup = ReplyKeyboardRemove()
+        await bot.sendMessage(chat_id, f'How much {coin_type} do you want to simulate (in ZAR)?', reply_markup=markup)
 
-        bot.reply_to(message, response['summary'])
-    except KeyError:
-        bot.reply_to(message, "Don't be greedy, that's too much!")
+    elif amount > 0:
+        await bot.sendMessage(chat_id, f'Simulating {amount} ZAR for {coin_type}...')
+        coin_data = COIN_MAP[coin_type]
+        message = arbitrage(amount, **coin_data)['summary']
+        # import pdb; pdb.set_trace()
+        await bot.sendMessage(chat_id, message, reply_to_message_id=msg['message_id'])
 
-
-# @bot.message_handler(commands=['arbitrage'])
-def arbitrage_lite(message):
-    chat_id = message.chat.id
-
-    kraken_asks = prepare_order_book(kraken_order_book('asks', coin_code='LTC'), 'asks')
-    icex3_bids = prepare_order_book(ice3x_order_book('bid', coin_code='LTC'), 'bids', bitcoin_column='amount')
-
-    try:
-        transfer_amount = Decimal(message.text)
-    except:
-        transfer_amount = 0
-        bot.reply_to(message, 'Sorry, could not read reply.')
-
-    currency_exchange_rate = Decimal(16.711)
-
-    new = True
-
-    sim = partial(simulate, coin_code='LTC', coin_name='Litecoin', exchange_name='Ice3x')
-
-    try:
-        if new:
-            response = sim(
-                transfer_amount, kraken_asks, icex3_bids, transfer_fees=True)
-        else:
-            response = sim(
-                transfer_amount, kraken_asks, icex3_bids, exchange_rate=currency_exchange_rate, transfer_fees=False)
-
-        bot.reply_to(message, response['summary'])
-    except KeyError:
-        bot.reply_to(message, "Don't be greedy, that's too much!")
+    else:
+        print('No idea')
 
 
-def arbitrage_eth(message):
-    chat_id = message.chat.id
+getcontext().prec = 8  # Set Decimal context.
+load_dotenv('.env')  # Load environment
 
-    kraken_asks = prepare_order_book(kraken_order_book('asks', coin_code='ETH'), 'asks')
-    icex3_bids = prepare_order_book(ice3x_order_book('bid', coin_code='ETH'), 'bids', bitcoin_column='amount')
+TOKEN = os.environ.get('TELEGRAM_TOKEN')  # get token from environment
 
-    try:
-        transfer_amount = Decimal(message.text)
-    except:
-        transfer_amount = 0
-        bot.reply_to(message, 'Sorry, could not read reply.')
+bot = telepot.aio.Bot(TOKEN)
+answerer = telepot.aio.helper.Answerer(bot)
+loop = asyncio.get_event_loop()
 
-    currency_exchange_rate = Decimal(16.711)
+loop.create_task(MessageLoop(bot, {
+    'chat': on_chat_message,
+}).run_forever())
 
-    new = True
+print('Listening ...')
 
-    sim = partial(simulate, coin_code='ETH', coin_name='Ethereum', exchange_name='Ice3x')
-
-    try:
-        if new:
-            response = sim(
-                transfer_amount, kraken_asks, icex3_bids, transfer_fees=True)
-        else:
-            response = sim(
-                transfer_amount, kraken_asks, icex3_bids, exchange_rate=currency_exchange_rate, transfer_fees=False)
-
-        bot.reply_to(message, response['summary'])
-    except KeyError:
-        bot.reply_to(message, "Don't be greedy, that's too much!")
-
-
-def main():
-    print('Listening for messages...')
-    bot.polling(interval=5)
-
-
-if __name__ == '__main__':
-    main()
+loop.run_forever()

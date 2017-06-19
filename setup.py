@@ -25,7 +25,7 @@ setup(
     # use_scm_version={
     #     'write_to': 'src/static/version.txt',
     # },
-    version='0.9.1',
+    version='0.10.0',
 
     description=(
         "Bitcoin Arbitrage tools"
@@ -66,14 +66,16 @@ setup(
     # requirements files see:
     # https://packaging.python.org/en/latest/requirements.html
     install_requires=[
-        'python-dotenv',
-        'requests',
-        'pandas',
-        'pyTelegramBotAPI',
+        # 'pyTelegramBotAPI',
+        'telepot',  # Trying out new package
         'krakenex>=0.1.4',
+        'matplotlib',
+        'seaborn',
+        'pandas',
         'notebook',
-        'html5lib',
         'lxml',
+        'html5lib',
+        'python-dotenv',
         'BeautifulSoup4',
         # API tools
         'requests>=2',

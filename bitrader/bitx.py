@@ -188,7 +188,6 @@ class BitX:
             result[order_id] = status['success']
         return result
 
-
     def get_funding_address(self, asset):
         """
         Returns the default receive address associated with your account and the amount received via the address. You

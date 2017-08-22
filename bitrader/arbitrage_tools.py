@@ -13,26 +13,48 @@ sns.set_context(font_scale=1.1)
 
 KRAKEN_API_KEY = os.environ.get('KRAKEN_API_KEY')
 KRAKEN_PRIVATE_KEY = os.environ.get('KRAKEN_PRIVATE_KEY')
+
 BITX_KEY = os.environ.get('BITX_KEY')
 BITX_SECRET = os.environ.get('BITX_SECRET')
 
+ICE3X_KEY = os.getenv('ICE3X_KEY')  # .encode('utf-8')
+ICE3X_PUBLIC = os.getenv('ICE3X_PUBLIC')  # .encode('utf-8')
+
 COIN_MAP = {
-    'bitcoin': dict(
-        coin_code='XBT',
-        coin_name='Bitcoin',
-        exchange_name='Luno'),
-    'litecoin': dict(
-        coin_code='LTC',
-        coin_name='Litecoin',
-        exchange_name='Ice3x'),
-    'ethereum': dict(
-        coin_code='ETH',
-        coin_name='Ethereum',
-        exchange_name='Ice3x')
+    'ice3x': {
+        'bitcoin': dict(
+            coin_code='XBT',
+            coin_name='Bitcoin',
+            exchange_name='Ice3x'),
+        'litecoin': dict(
+            coin_code='LTC',
+            coin_name='Litecoin',
+            exchange_name='Ice3x'),
+        'ethereum': dict(
+            coin_code='ETH',
+            coin_name='Ethereum',
+            exchange_name='Ice3x')
+    },
+    'luno': {
+        'bitcoin': dict(
+            coin_code='XBT',
+            coin_name='Bitcoin',
+            exchange_name='Luno'),
+    },
+    'kraken': {
+        'bitcoin': dict(
+            coin_code='XBT',
+            coin_name='Bitcoin',
+            exchange_name='Kraken'),
+        'litecoin': dict(
+            coin_code='LTC',
+            coin_name='Litecoin',
+            exchange_name='Kraken'),
+    },
 }
 
 
-def get_forex_buy_quote(currency_code: str = 'EUR', source: str = 'FNB'):
+def get_forex_buy_quote(currency_code: str = 'EUR', source: str = 'FNB', order_type: str = 'buy'):
     """Get latest forex from FNB website
 
     """
@@ -42,7 +64,13 @@ def get_forex_buy_quote(currency_code: str = 'EUR', source: str = 'FNB'):
             index_col=1, header=0, match=currency_code)
 
         df = tables[0]
-        exhange_rate = df.loc[currency_code, 'Bank Selling Rate']
+
+        types = {
+            'buy': 'Bank Selling Rate',
+            'sell': 'Bank Buying Rate',
+        }
+
+        exhange_rate = df.loc[currency_code, types[order_type]]
 
         return Decimal("%.4f" % float(exhange_rate))
 
@@ -66,7 +94,14 @@ def kraken_order_book(book_type: str, currency_code: str = 'EUR', coin_code: str
 
 
 def luno_order_book(book_type: str, currency_code: str = 'ZAR'):
-    """BitX specific orderbook retrieval
+    """
+
+    Args:
+        book_type: 'asks' or 'bids'
+        currency_code: Default = 'ZAR'.
+
+    Returns: Dataframe with order book.
+
     """
     from bitrader import bitx
 
@@ -83,7 +118,7 @@ def ice3x_order_book(book_type: str, coin_code: str = 'BTC', currency_code: str 
     ice = Ice3xAPI(cache=False, future=False)
 
     pair_map = {
-        'BTC': 3,
+        'XBT': 3,
         'LTC': 6,
         'ETH': 11,
     }
@@ -228,10 +263,10 @@ def simulate(transfer_amount, eur_asks, zar_bids,
 
 def get_books(coin_code: str = 'XBT', exchange_name: str = 'Luno'):
     """
-    
+
     :param coin_code: BTC, LTC, or ETH
     :param exchange_name: Luno or Ice3x
-    :return: 
+    :return:
     """
     eur_asks = prepare_order_book(kraken_order_book('asks', coin_code=coin_code), 'asks')
 
@@ -248,7 +283,7 @@ def get_books(coin_code: str = 'XBT', exchange_name: str = 'Luno'):
 def arbitrage(amount, coin_code='XBT', coin_name='bitcoin', exchange_name='Luno',
               exchange_rate=None, transfer_fees: bool = True, verbose: bool = False, books=None):
     """
-    
+
     :param amount: The amount in ZAR (TODO: also allow reverse
     :param coin_code: Default = XBT. LTC and ETH also supported.
     :param coin_name: Default = Bitcoin. Litecoin and Ethereum also supported
@@ -256,16 +291,19 @@ def arbitrage(amount, coin_code='XBT', coin_name='bitcoin', exchange_name='Luno'
     :param exchange_rate: The ZAR / EURO Exchange rate.
     :param transfer_fees: Whether to include FOREX fees or not. E.g. when you want to simulate money alrady in Europe.
     :param verbose: Default = False. Whether to print the summary to command line
-    :param books: 
+    :param books:
     :return: Dict with ROIC and summary of arbitrage
-    
+
     TODO:
         Make coin_code, coin_name, exchange_name a NamedTuple or something.
         Even better, make Exchange, Bank, Coin classes and build in stuff like exchange rates.
     """
 
     if not books:
-        eur_asks, zar_bids = get_books(coin_code=coin_code, exchange_name=exchange_name)
+        try:
+            eur_asks, zar_bids = get_books(coin_code=coin_code, exchange_name=exchange_name)
+        except KeyError:
+            return 'Error processing order books. Check if the exchanges are working and that there are open orders.'
     else:
         eur_asks, zar_bids = books
 
@@ -344,23 +382,28 @@ def arbitrage(amount, coin_code='XBT', coin_name='bitcoin', exchange_name='Luno'
         return "Don't be greedy, that's too much!"
 
 
-def optimal(max_invest: int = 1000000, coin: str = 'bitcoin', return_format: str = 'text'):
-    """
-    :param max_invest: 
-    :param coin: bitcoin, litecoin, ethereum
-    :param return_format: text or picture
-    :return: 
+def optimal(max_invest: int = 1000000, coin: str = 'bitcoin', exchange='luno', return_format: str = 'text',
+            exchange_rate: Decimal = None):
     """
 
-    exchange_rate = get_forex_buy_quote('EUR')
+    Args:
+        max_invest:
+        coin: bitcoin, litecoin, ethereum
+        exchange: luno, ice3x or kraken
+        return_format: text or picture
+        exchange_rate:
+    """
+
+    if not exchange_rate:
+        exchange_rate = get_forex_buy_quote('EUR')
 
     books = get_books(
-        coin_code=COIN_MAP[coin]['coin_code'],
-        exchange_name=COIN_MAP[coin]['exchange_name']
+        coin_code=COIN_MAP[exchange][coin]['coin_code'],
+        exchange_name=COIN_MAP[exchange][coin]['exchange_name']
     )
 
     results = []
-    for amount in range(1000, max_invest, 1000):
+    for amount in range(5000, max_invest, 5000):
 
         try:
             results.append(
@@ -369,7 +412,8 @@ def optimal(max_invest: int = 1000000, coin: str = 'bitcoin', return_format: str
                         amount=amount,
                         exchange_rate=exchange_rate,
                         books=books,
-                        **COIN_MAP[coin],
+                        transfer_fees=True,
+                        **COIN_MAP[exchange][coin],
                     )['roi']))
         except Exception as e:
             print(e)
@@ -401,15 +445,22 @@ def optimal(max_invest: int = 1000000, coin: str = 'bitcoin', return_format: str
         raise KeyError(f'Invalid return_format selection {return_format}')
 
 
-def reverse_arb(amount, coin_code='LTC'):
+def reverse_arb(amount, coin='litecoin', exchange_buy='ice3x', exchange_sell='kraken'):
     """
-    
-    :param amount: 
-    :param coin_code: 
-    :return: 
+
+    :param amount:
+    :param coin:
+    :return:
     """
-    zar_asks = prepare_order_book(ice3x_order_book('ask', coin_code=coin_code), 'asks', bitcoin_column='amount')
-    eur_bids = prepare_order_book(kraken_order_book('bids', coin_code=coin_code), 'asks')
+    if coin in ['litecoin', 'ethereum']:
+        zar_asks = prepare_order_book(
+            ice3x_order_book(
+                'ask', coin_code=COIN_MAP[exchange_buy][coin]['coin_code']), 'asks', bitcoin_column='amount')
+    else:
+        zar_asks = prepare_order_book(luno_order_book('asks'), 'asks')
+
+    eur_bids = prepare_order_book(
+        kraken_order_book('bids', coin_code=COIN_MAP[exchange_sell][coin]['coin_code']), 'asks')
 
     coins = coin_exchange(zar_asks, amount, 'buy')
     euro = coin_exchange(eur_bids, coins, 'sell')
@@ -420,4 +471,3 @@ def reverse_arb(amount, coin_code='LTC'):
     rands = euro * exchange_rate
 
     return f'R{amount:.0f}, R{rands:.0f}, {(rands - amount)/amount * 100:.2f}%'
-

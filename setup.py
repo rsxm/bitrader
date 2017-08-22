@@ -78,6 +78,7 @@ setup(
         'python-dotenv',
         'BeautifulSoup4',
         # API tools
+        'redis',  # Make optional?
         'requests>=2',
         'requests-cache>=0.4.12',
         'requests-futures>=0.9.7',

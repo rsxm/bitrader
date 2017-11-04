@@ -204,8 +204,8 @@ def simulate(transfer_amount, eur_asks, zar_bids,
         exchange_rate = get_forex_buy_quote('EUR')
 
     if transfer_fees:
-        _swift_fee = Decimal(105)
-        _fnb_comission = min(max(transfer_amount * Decimal(0.0052), Decimal(140)), Decimal(650))
+        _swift_fee = Decimal(110)
+        _fnb_comission = min(max(transfer_amount * Decimal(0.0055), Decimal(140)), Decimal(650))
         _kraken_deposit_fee = Decimal(15)
     else:
         _swift_fee = Decimal(0)
@@ -317,11 +317,10 @@ def arbitrage(amount, coin_code='XBT', coin_name='bitcoin', exchange_name='Luno'
             exchange_rate = get_forex_buy_quote('EUR')
 
         if transfer_fees:
-            _swift_fee = Decimal(105)
+            _swift_fee = Decimal(110)
             # TODO: Factor in ebucks?
-            _fnb_comission = min(max(transfer_amount * Decimal(0.0052), Decimal(140)), Decimal(650))
-            # TODO: With SEPA deposit fee is 0. But check other methods?
-            _kraken_deposit_fee = Decimal(0)
+            _fnb_comission = min(max(transfer_amount * Decimal(0.0055), Decimal(140)), Decimal(650))
+            _kraken_deposit_fee = Decimal(15) #Fees: https://www.kraken.com/en-us/help/faq
         else:
             _swift_fee = Decimal(0)
             _fnb_comission = Decimal(0)
@@ -330,10 +329,12 @@ def arbitrage(amount, coin_code='XBT', coin_name='bitcoin', exchange_name='Luno'
         capital = transfer_amount + _fnb_comission + _swift_fee
 
         euros = transfer_amount / exchange_rate - _kraken_deposit_fee
-        _kraken_fee = euros * Decimal(0.0026)  # TODO: Allow to specify lower tier, e.g. over $50k = 0.0024
-        # TODO: There is also now a Bitcoin send fee
+        _kraken_fee = euros * Decimal(0.0026) # TODO: Allow to specify lower tier, e.g. over $50k = 0.0024
 
-        bitcoins = coin_exchange(eur_asks, euros - _kraken_fee, 'buy')
+        _kraken_withdrawal_fee = Decimal(0.001)
+        _luno_deposit_fee = Decimal(0.0002)
+
+        bitcoins = coin_exchange(eur_asks, euros - _kraken_fee , 'buy') - _kraken_withdrawal_fee - _luno_deposit_fee
         _bitx_fees = bitcoins * Decimal(0.01)  # TODO: Allow to specify lower tier, e.g. over 10 BTC = 0.0075
 
         if transfer_fees:
@@ -351,6 +352,7 @@ def arbitrage(amount, coin_code='XBT', coin_name='bitcoin', exchange_name='Luno'
             _swift_fee +
             _fnb_comission +
             _kraken_fee * exchange_rate +
+            _kraken_deposit_fee * exchange_rate +
             _bitx_fees * btc_zar_exchange_rate +
             _bitx_withdrawel_fee)
 

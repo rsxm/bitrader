@@ -212,6 +212,9 @@ class BitX:
     def get_balance(self):
         return self.api_request('balance', None)
 
+    def get_fee_info(self):
+        return self.api_request('fee_info', {'pair': 'XBTZAR'})
+
     def get_transactions(self, account_id, min_row=None, max_row=None):
         params = {}
         if min_row is not None:

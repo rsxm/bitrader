@@ -212,7 +212,7 @@ def get_books(coin_code: str = 'XBT', exchange_name: str = 'Luno'):
 
 
 def arbitrage(amount, coin_code='XBT', coin_name='bitcoin', exchange_name='Luno',
-              exchange_rate=None, transfer_fees: bool = True, verbose: bool = False, books=None):
+              exchange_rate=None, transfer_fees: bool = True, verbose: bool = False, books=None, trade_fees: bool = True):
     """
 
     :param amount: The amount in ZAR (TODO: also allow reverse
@@ -266,7 +266,11 @@ def arbitrage(amount, coin_code='XBT', coin_name='bitcoin', exchange_name='Luno'
         _luno_deposit_fee = Decimal(0.0002)
 
         bitcoins = coin_exchange(eur_asks, euros - _kraken_fee , 'buy') - _kraken_withdrawal_fee - _luno_deposit_fee
-        _bitx_fees = bitcoins * Decimal(0.01)  # TODO: Allow to specify lower tier, e.g. over 10 BTC = 0.0075
+
+        if trade_fees:
+            _bitx_fees = bitcoins * Decimal(0.01)  # TODO: Allow to specify lower tier, e.g. over 10 BTC = 0.0075
+        else:
+            _bitx_fees = Decimal(0)
 
         if transfer_fees:
             _bitx_withdrawel_fee = Decimal(8.5)  # TODO: Check Ice3x fees

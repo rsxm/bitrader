@@ -192,75 +192,6 @@ def coin_exchange(df, limit, order_type: str, bitcoin_column: str = 'volume', cu
     return result
 
 
-def simulate(transfer_amount, eur_asks, zar_bids,
-             coin_name: str = 'Bitcoin', coin_code: str = 'BTC', exchange_name: str = 'Luno',
-             exchange_rate=None,
-             transfer_fees: bool = True, verbose: bool = True):
-    """ Calculate the arbitrage oppertunity
-
-    """
-
-    if not exchange_rate:
-        exchange_rate = get_forex_buy_quote('EUR')
-
-    if transfer_fees:
-        _swift_fee = Decimal(110)
-        _fnb_comission = min(max(transfer_amount * Decimal(0.0055), Decimal(140)), Decimal(650))
-        _kraken_deposit_fee = Decimal(15)
-    else:
-        _swift_fee = Decimal(0)
-        _fnb_comission = Decimal(0)
-        _kraken_deposit_fee = Decimal(0)
-
-    capital = transfer_amount + _fnb_comission + _swift_fee
-
-    euros = transfer_amount / exchange_rate - _kraken_deposit_fee
-    _kraken_fee = euros * Decimal(0.0026)
-
-    bitcoins = coin_exchange(eur_asks, euros - _kraken_fee, 'buy')
-    _bitx_fees = bitcoins * Decimal(0.01)
-
-    if transfer_fees:
-        _bitx_withdrawel_fee = Decimal(8.5)
-    else:
-        _bitx_withdrawel_fee = Decimal(0)
-
-    rands = coin_exchange(zar_bids, bitcoins - _bitx_fees, 'sell')
-
-    btc_zar_exchange_rate = rands / (bitcoins - _bitx_fees)
-
-    return_value = rands - _bitx_withdrawel_fee
-
-    total_fees = (
-        _swift_fee +
-        _fnb_comission +
-        _kraken_fee * exchange_rate +
-        _bitx_fees * btc_zar_exchange_rate +
-        _bitx_withdrawel_fee)
-
-    response = [
-        f'Rands out: {capital:.2f}',
-        f'# forex conversion: R{_swift_fee + _fnb_comission:.2f}',
-        f'Euro: {euros:.2f}',
-        f'# kraken fee: R{(_kraken_fee + _kraken_deposit_fee) * exchange_rate:.2f}',
-        f'{coin_name}: {bitcoins:.8f}',
-        f'# {exchange_name} fee: R{(_bitx_fees * btc_zar_exchange_rate + _bitx_withdrawel_fee):.2f}',
-        f'Rands in: {rands:.2f}',
-        '--------------------',
-        f'Profit: {return_value - capital:.2f}',
-        f'ROI: {((return_value - capital) / capital) * 100:.2f}',
-        '--------------------',
-        f'ZAR/EUR: {exchange_rate:.2f}',
-        f'EUR/{coin_code}: {(euros - _kraken_fee) / bitcoins:.2f}',
-        f'{coin_code}/ZAR: {btc_zar_exchange_rate:.2f}'
-    ]
-
-    if verbose:
-        print('\n'.join(response))
-
-    return {'roi': ((return_value - capital) / capital) * 100, 'summary': '\n'.join(response)}
-
-
 def get_books(coin_code: str = 'XBT', exchange_name: str = 'Luno'):
     """
 
@@ -281,7 +212,7 @@ def get_books(coin_code: str = 'XBT', exchange_name: str = 'Luno'):
 
 
 def arbitrage(amount, coin_code='XBT', coin_name='bitcoin', exchange_name='Luno',
-              exchange_rate=None, transfer_fees: bool = True, verbose: bool = False, books=None):
+              exchange_rate=None, transfer_fees: bool = True, verbose: bool = False, books=None, trade_fees: bool = True):
     """
 
     :param amount: The amount in ZAR (TODO: also allow reverse
@@ -335,34 +266,42 @@ def arbitrage(amount, coin_code='XBT', coin_name='bitcoin', exchange_name='Luno'
         _luno_deposit_fee = Decimal(0.0002)
 
         bitcoins = coin_exchange(eur_asks, euros - _kraken_fee , 'buy') - _kraken_withdrawal_fee - _luno_deposit_fee
-        _bitx_fees = bitcoins * Decimal(0.01)  # TODO: Allow to specify lower tier, e.g. over 10 BTC = 0.0075
+
+        if trade_fees:
+            _luno_fees = bitcoins * Decimal(0.01)  # TODO: Allow to specify lower tier, e.g. over 10 BTC = 0.0075
+        else:
+            _luno_fees = Decimal(0)
 
         if transfer_fees:
-            _bitx_withdrawel_fee = Decimal(8.5)  # TODO: Check Ice3x fees
+            _luno_withdrawel_fee = Decimal(8.5)  # TODO: Check Ice3x fees
         else:
-            _bitx_withdrawel_fee = Decimal(0)
+            _luno_withdrawel_fee = Decimal(0)
 
-        rands = coin_exchange(zar_bids, bitcoins - _bitx_fees, 'sell')
+        rands = coin_exchange(zar_bids, bitcoins - _luno_fees, 'sell')
 
-        btc_zar_exchange_rate = rands / (bitcoins - _bitx_fees)
+        btc_zar_exchange_rate = rands / (bitcoins - _luno_fees)
 
-        return_value = rands - _bitx_withdrawel_fee
+        return_value = rands - _luno_withdrawel_fee
 
         total_fees = (
             _swift_fee +
             _fnb_comission +
             _kraken_fee * exchange_rate +
             _kraken_deposit_fee * exchange_rate +
-            _bitx_fees * btc_zar_exchange_rate +
-            _bitx_withdrawel_fee)
+            _kraken_withdrawal_fee * btc_zar_exchange_rate +
+            _luno_deposit_fee * btc_zar_exchange_rate +
+            _luno_fees * btc_zar_exchange_rate +
+            _luno_withdrawel_fee)
 
         response = [
             f'Rands out: {capital:.2f}',
             f'# forex conversion: R{_swift_fee + _fnb_comission:.2f}',
             f'Euro: {euros:.2f}',
-            f'# kraken fee: R{(_kraken_fee + _kraken_deposit_fee) * exchange_rate:.2f}',
+            f'# kraken deposit and withdraw fee: R{(_kraken_deposit_fee * exchange_rate) + (_kraken_withdrawal_fee * btc_zar_exchange_rate):.2f}',
+            f'# kraken trade fee: R{(_kraken_fee * exchange_rate):.2f}',
             f'{coin_name}: {bitcoins:.8f}',
-            f'# {exchange_name} fee: R{(_bitx_fees * btc_zar_exchange_rate + _bitx_withdrawel_fee):.2f}',
+            f'# {exchange_name} deposit and withdraw fee: R{_luno_withdrawel_fee + (_luno_deposit_fee * btc_zar_exchange_rate):.2f}',
+            f'# {exchange_name} trade fee: R{(_luno_fees * btc_zar_exchange_rate):.2f}',
             f'Rands in: {rands:.2f}',
             '--------------------',
             f'Profit: {return_value - capital:.2f}',

@@ -25,7 +25,7 @@ setup(
     # use_scm_version={
     #     'write_to': 'src/static/version.txt',
     # },
-    version='0.10.0',
+    version='0.12.0',
 
     description=(
         "Bitcoin Arbitrage tools"
@@ -66,8 +66,7 @@ setup(
     # requirements files see:
     # https://packaging.python.org/en/latest/requirements.html
     install_requires=[
-        # 'pyTelegramBotAPI',
-        'telepot',  # Trying out new package
+        'telepot>=12.4',
         'krakenex>=0.1.4',
         'matplotlib',
         'seaborn',

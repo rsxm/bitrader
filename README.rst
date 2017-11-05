@@ -4,8 +4,8 @@ BITRADER
 
 Bitcoin Arbitrage utilities. Telegram bot included for free!
 
-Version 0.12.0: Bot now sends graphs if you ask for /status :-)
-Version  0.9.1: Now also supports Ethereum and Litecoin!
+- 2017-11-05: Version 0.12.0 released! Bot now sends pretty graphs if you ask for /status :-)
+- 2017-06-14: Now also supports Ethereum and Litecoin!
 
 Quickstart
 ==========

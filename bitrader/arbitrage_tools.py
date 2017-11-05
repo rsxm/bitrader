@@ -7,9 +7,10 @@ import os
 from decimal import Decimal
 
 import pandas as pd
-import seaborn as sns
 
-sns.set_context(font_scale=1.1)
+# Removed as it complicates the bot on server deploys (?)
+# import seaborn as sns
+# sns.set_context(font_scale=1.1)
 
 KRAKEN_API_KEY = os.environ.get('KRAKEN_API_KEY')
 KRAKEN_PRIVATE_KEY = os.environ.get('KRAKEN_PRIVATE_KEY')
@@ -49,6 +50,10 @@ COIN_MAP = {
         'litecoin': dict(
             coin_code='LTC',
             coin_name='Litecoin',
+            exchange_name='Kraken'),
+        'ethereum': dict(
+            coin_code='ETH',
+            coin_name='Ethereum',
             exchange_name='Kraken'),
     },
 }
@@ -318,9 +323,8 @@ def arbitrage(amount, coin_code='XBT', coin_name='bitcoin', exchange_name='Luno'
 
         if transfer_fees:
             _swift_fee = Decimal(110)
-            # TODO: Factor in ebucks?
             _fnb_comission = min(max(transfer_amount * Decimal(0.0055), Decimal(140)), Decimal(650))
-            _kraken_deposit_fee = Decimal(15) #Fees: https://www.kraken.com/en-us/help/faq
+            _kraken_deposit_fee = Decimal(15)  # Fees: https://www.kraken.com/en-us/help/faq
         else:
             _swift_fee = Decimal(0)
             _fnb_comission = Decimal(0)

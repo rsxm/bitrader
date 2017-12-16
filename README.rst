@@ -4,6 +4,12 @@ BITRADER
 
 Bitcoin Arbitrage utilities. Telegram bot included for free!
 
+Features being worked on at the moment:
+
+- Kraken and Luno buying and selling.
+- Support for Altcointrader.co.za
+- Experiemental local arbitrage routes
+
 Version 0.12.0: Bot now sends graphs if you ask for /status :-)
 Version  0.9.1: Now also supports Ethereum and Litecoin!
 

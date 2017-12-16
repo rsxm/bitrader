@@ -3,10 +3,20 @@
 Tools for determining the
 
 """
+import itertools
 import os
+import time
 from decimal import Decimal
+from http.client import HTTPException
+from socket import timeout
 
+import krakenex
 import pandas as pd
+import requests
+from bs4 import BeautifulSoup
+
+from bitrader import bitx
+from bitrader.api_tools import Ice3xAPI
 
 # Removed as it complicates the bot on server deploys (?)
 # import seaborn as sns
@@ -20,6 +30,8 @@ BITX_SECRET = os.environ.get('BITX_SECRET')
 
 ICE3X_KEY = os.getenv('ICE3X_KEY')  # .encode('utf-8')
 ICE3X_PUBLIC = os.getenv('ICE3X_PUBLIC')  # .encode('utf-8')
+
+CFUID = os.getenv('CFUID')
 
 COIN_MAP = {
     'ice3x': {
@@ -59,6 +71,28 @@ COIN_MAP = {
 }
 
 
+def retry(delays=(5, 5, 5, 10, 5, 5, 5, 10), exception=Exception, report=lambda *args: None):
+    def wrapper(function):
+        def wrapped(*args, **kwargs):
+            problems = []
+            for delay in itertools.chain(delays, [None]):
+                try:
+                    return function(*args, **kwargs)
+                except exception as problem:
+                    problems.append(problem)
+                    if delay is None:
+                        report("retryable failed definitely:", problems)
+                        raise
+                    else:
+                        report("retryable failed:", problem,
+                               "-- delaying for %ds" % delay)
+                        time.sleep(delay)
+
+        return wrapped
+
+    return wrapper
+
+
 def get_forex_buy_quote(currency_code: str = 'EUR', source: str = 'FNB', order_type: str = 'buy'):
     """Get latest forex from FNB website
 
@@ -80,7 +114,8 @@ def get_forex_buy_quote(currency_code: str = 'EUR', source: str = 'FNB', order_t
         return Decimal("%.4f" % float(exhange_rate))
 
 
-def kraken_order_book(book_type: str, currency_code: str = 'EUR', coin_code: str = 'XBT'):
+@retry(exception=(HTTPException, timeout, ValueError), report=print)
+def kraken_order_book(book_type: str, currency_code: str = 'EUR', coin_code: str = 'XBT', pair: str = None):
     """Kraken specific orderbook retrieval
 
     """
@@ -88,7 +123,8 @@ def kraken_order_book(book_type: str, currency_code: str = 'EUR', coin_code: str
 
     kraken_api = krakenex.API(key=KRAKEN_API_KEY, secret=KRAKEN_PRIVATE_KEY, conn=krakenex.Connection())
 
-    pair = f'X{coin_code}Z{currency_code}'
+    if not pair:
+        pair = f'X{coin_code}Z{currency_code}'
     orders = kraken_api.query_public('Depth', {'pair': pair})
 
     df = pd.DataFrame(
@@ -98,19 +134,17 @@ def kraken_order_book(book_type: str, currency_code: str = 'EUR', coin_code: str
     return df
 
 
-def luno_order_book(book_type: str, currency_code: str = 'ZAR'):
+def luno_order_book(book_type: str, pair: str = 'XBTZAR'):
     """
 
     Args:
         book_type: 'asks' or 'bids'
-        currency_code: Default = 'ZAR'.
+        pair: Default = 'XBTZAR'.
 
     Returns: Dataframe with order book.
 
     """
-    from bitrader import bitx
-
-    bitx_api = bitx.BitX(BITX_KEY, BITX_SECRET)
+    bitx_api = bitx.BitX(BITX_KEY, BITX_SECRET, options={'pair': pair})
     df = bitx_api.get_order_book_frame()
 
     return df[book_type]
@@ -119,7 +153,6 @@ def luno_order_book(book_type: str, currency_code: str = 'ZAR'):
 def ice3x_order_book(book_type: str, coin_code: str = 'BTC', currency_code: str = 'ZAR'):
     """Ice3X specific orderbook retrieval
     """
-    from bitrader.api_tools import Ice3xAPI
     ice = Ice3xAPI(cache=False, future=False)
 
     pair_map = {
@@ -217,7 +250,8 @@ def get_books(coin_code: str = 'XBT', exchange_name: str = 'Luno'):
 
 
 def arbitrage(amount, coin_code='XBT', coin_name='bitcoin', exchange_name='Luno',
-              exchange_rate=None, transfer_fees: bool = True, verbose: bool = False, books=None, trade_fees: bool = True):
+              exchange_rate=None, transfer_fees: bool = True, verbose: bool = False, books=None,
+              trade_fees: bool = True):
     """
 
     :param amount: The amount in ZAR (TODO: also allow reverse
@@ -264,12 +298,12 @@ def arbitrage(amount, coin_code='XBT', coin_name='bitcoin', exchange_name='Luno'
         capital = transfer_amount + _fnb_comission + _swift_fee
 
         euros = transfer_amount / exchange_rate - _kraken_deposit_fee
-        _kraken_fee = euros * Decimal(0.0026) # TODO: Allow to specify lower tier, e.g. over $50k = 0.0024
+        _kraken_fee = euros * Decimal(0.0026)  # TODO: Allow to specify lower tier, e.g. over $50k = 0.0024
 
         _kraken_withdrawal_fee = Decimal(0.001)
         _luno_deposit_fee = Decimal(0.0002)
 
-        bitcoins = coin_exchange(eur_asks, euros - _kraken_fee , 'buy') - _kraken_withdrawal_fee - _luno_deposit_fee
+        bitcoins = coin_exchange(eur_asks, euros - _kraken_fee, 'buy') - _kraken_withdrawal_fee - _luno_deposit_fee
 
         if trade_fees:
             _luno_fees = bitcoins * Decimal(0.01)  # TODO: Allow to specify lower tier, e.g. over 10 BTC = 0.0075
@@ -288,14 +322,14 @@ def arbitrage(amount, coin_code='XBT', coin_name='bitcoin', exchange_name='Luno'
         return_value = rands - _luno_withdrawel_fee
 
         total_fees = (
-            _swift_fee +
-            _fnb_comission +
-            _kraken_fee * exchange_rate +
-            _kraken_deposit_fee * exchange_rate +
-            _kraken_withdrawal_fee * btc_zar_exchange_rate +
-            _luno_deposit_fee * btc_zar_exchange_rate +
-            _luno_fees * btc_zar_exchange_rate +
-            _luno_withdrawel_fee)
+                _swift_fee +
+                _fnb_comission +
+                _kraken_fee * exchange_rate +
+                _kraken_deposit_fee * exchange_rate +
+                _kraken_withdrawal_fee * btc_zar_exchange_rate +
+                _luno_deposit_fee * btc_zar_exchange_rate +
+                _luno_fees * btc_zar_exchange_rate +
+                _luno_withdrawel_fee)
 
         response = [
             f'Rands out: {capital:.2f}',
@@ -348,7 +382,7 @@ def optimal(max_invest: int = 1000000, coin: str = 'bitcoin', exchange='luno', r
     )
 
     results = []
-    for amount in range(5000, max_invest, 5000):
+    for amount in range(20000, max_invest, 5000):
 
         try:
             results.append(
@@ -416,3 +450,121 @@ def reverse_arb(amount, coin='litecoin', exchange_buy='ice3x', exchange_sell='kr
     rands = euro * exchange_rate
 
     return f'R{amount:.0f}, R{rands:.0f}, {(rands - amount)/amount * 100:.2f}%'
+
+
+@retry(exception=(HTTPException, timeout, ValueError), report=print)
+def get_balance(asset: str = None):
+    kraken_api = krakenex.API(key=KRAKEN_API_KEY, secret=KRAKEN_PRIVATE_KEY, conn=krakenex.Connection())
+    balance = kraken_api.query_private('Balance')
+
+    if asset is not None:
+        amount = balance['result']['X' + asset]
+        print('{asset} balance: {amount}'.format(asset=asset, amount=amount))
+        return amount
+    else:
+        return balance
+
+
+@retry(exception=(HTTPException, timeout, ValueError), report=print)
+def withdraw(asset: str = 'XBT', wallet_key: str = 'Luno', amount=None):
+    kraken_api = krakenex.API(key=KRAKEN_API_KEY, secret=KRAKEN_PRIVATE_KEY, conn=krakenex.Connection())
+
+    if amount is None:
+        amount = get_balance(asset=asset)
+        amount = round(float(amount), 8)
+    if round(float(amount), 2) > 0:
+        result = kraken_api.query_private('Withdraw', {'asset': asset, 'key': wallet_key, 'amount': amount})
+        print('Success!!', result)
+        return result
+    else:
+        print('All funds have been withdrawn from f{wallet_key}')
+
+
+@retry(exception=(HTTPException, timeout, ValueError), report=print)
+def get_coins(amount=None):
+    if not amount:
+        # Use full balance
+        kraken_api = krakenex.API(key=KRAKEN_API_KEY, secret=KRAKEN_PRIVATE_KEY, conn=krakenex.Connection())
+        amount = kraken_api.query_private('Balance')['result']['ZEUR']
+        print(amount)
+
+    eur_asks = prepare_order_book(
+        kraken_order_book('asks', coin_code='XBT'), 'asks')
+
+    coins = coin_exchange(eur_asks, Decimal(amount), 'buy')
+    coins = str(round(coins, 6))
+    return coins
+
+
+@retry(exception=(HTTPException, timeout, ValueError), report=print)
+def buy_coins(euro=None, coins=None):
+    if coins is None:
+        coins = get_coins(amount=euro)
+
+    kraken_api = krakenex.API(key=KRAKEN_API_KEY, secret=KRAKEN_PRIVATE_KEY, conn=krakenex.Connection())
+    result = kraken_api.query_private(
+        'AddOrder', {'pair': 'XXBTZEUR', 'type': 'buy', 'ordertype': 'market', 'volume': coins})
+
+    return result
+
+
+def truncate(f, n):
+    """Truncates/pads a float f to n decimal places without rounding"""
+    s = '{}'.format(f)
+    if 'e' in s or 'E' in s:
+        return '{0:.{1}f}'.format(f, n)
+    i, p, d = s.partition('.')
+    return '.'.join([i, (d + '0' * n)[:n]])
+
+
+def altcointrader_order_books(cfduid: str):
+    """To use this function you need to manually get the cfduid  by copying the cookie value from your browser.
+
+    """
+    s = requests.Session()
+    s.headers.update({
+        'User-Agent':
+            'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/61.0.3163.100 Safari/537.36'
+    })
+    s.cookies.update({
+        '__cfduid': cfduid,
+    })
+
+    assets = [
+        ('xbt', '/'),
+        #     ('bch', '/bcc'),
+        #     ('btg', '/btg'),
+        ('ltc', '/ltc'),
+        #     ('nmc', '/nmc'),
+        ('xrp', '/xrp'),
+        ('eth', '/eth'),
+        #     ('dash', '/dash'),
+        #     ('zec', '/zec'),
+    ]
+
+    base_url = 'https://www.altcointrader.co.za'
+    order_book = {}
+
+    for code, path in assets:
+        r = s.get(base_url + path)
+        soup = BeautifulSoup(r.text, "html.parser")
+        asks = []
+        bids = []
+        for row in soup.select('tr.orderUdSell'):
+            asks.append({
+                'volume': row.select_one('.orderUdSAm').text,
+                'price': row.select_one('.orderUdSPr').text
+            })
+
+        for row in soup.select('tr.orderUdBuy'):
+            bids.append({
+                'volume': row.select_one('.orderUdBAm').text,
+                'price': row.select_one('.orderUdBPr').text
+            })
+
+        order_book.update({code: {
+            'timestamp': int(time.time() * 1000),
+            'asks': asks,
+            'bids': bids,
+        }})
+    return order_book

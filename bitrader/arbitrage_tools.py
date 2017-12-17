@@ -32,6 +32,8 @@ ICE3X_KEY = os.getenv('ICE3X_KEY')  # .encode('utf-8')
 ICE3X_PUBLIC = os.getenv('ICE3X_PUBLIC')  # .encode('utf-8')
 
 CFUID = os.getenv('CFUID')
+CFCLEARANCE = os.getenv('CFCLEARANCE')
+USERAGENT = os.getenv('USERAGENT')
 
 COIN_MAP = {
     'ice3x': {
@@ -150,10 +152,12 @@ def luno_order_book(book_type: str, pair: str = 'XBTZAR'):
     return df[book_type]
 
 
-def ice3x_order_book(book_type: str, coin_code: str = 'BTC', currency_code: str = 'ZAR'):
+def ice3x_order_book(book_type: str, coin_code: str = 'XBT'):
     """Ice3X specific orderbook retrieval
     """
     ice = Ice3xAPI(cache=False, future=False)
+
+    book_type = book_type[:-1]
 
     pair_map = {
         'XBT': 3,
@@ -169,9 +173,10 @@ def ice3x_order_book(book_type: str, coin_code: str = 'BTC', currency_code: str 
         api_params=f'type={book_type}&pair_id={pair_id}',
         data_format='raw')
 
-    bids = pd.DataFrame(r['response'].json()['response']['entities'])
+    df = pd.DataFrame(r['response'].json()['response']['entities'])
+    df.rename(columns={"amount": "volume"}, inplace=True)
 
-    return bids
+    return df
 
 
 def prepare_order_book(order_book, book_type: str, bitcoin_column: str = 'volume', currency_column: str = 'price'):
@@ -242,7 +247,7 @@ def get_books(coin_code: str = 'XBT', exchange_name: str = 'Luno'):
     if exchange_name.lower() == 'luno':
         zar_bids = prepare_order_book(luno_order_book('bids'), 'bids')
     elif exchange_name.lower() == 'ice3x':
-        zar_bids = prepare_order_book(ice3x_order_book('bid', coin_code=coin_code), 'bids', bitcoin_column='amount')
+        zar_bids = prepare_order_book(ice3x_order_book('bids', coin_code=coin_code), 'bids')
     else:
         raise KeyError(f'{exchange_name} is not a valid exchange_name')
 
@@ -434,7 +439,7 @@ def reverse_arb(amount, coin='litecoin', exchange_buy='ice3x', exchange_sell='kr
     if coin in ['litecoin', 'ethereum']:
         zar_asks = prepare_order_book(
             ice3x_order_book(
-                'ask', coin_code=COIN_MAP[exchange_buy][coin]['coin_code']), 'asks', bitcoin_column='amount')
+                'asks', coin_code=COIN_MAP[exchange_buy][coin]['coin_code']), 'asks')
     else:
         zar_asks = prepare_order_book(luno_order_book('asks'), 'asks')
 
@@ -517,54 +522,51 @@ def truncate(f, n):
     return '.'.join([i, (d + '0' * n)[:n]])
 
 
-def altcointrader_order_books(cfduid: str):
-    """To use this function you need to manually get the cfduid  by copying the cookie value from your browser.
+def altcointrader_order_books(user_agent: str, cfduid: str, cfclearance: str, book_type: str, coin_code: str = 'XBT'):
+    """To use this function you need to manually get the cfduid and cfclearance  by copying the cookie value from your browser.
 
     """
     s = requests.Session()
     s.headers.update({
-        'User-Agent':
-            'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/61.0.3163.100 Safari/537.36'
+        'User-Agent': user_agent
     })
     s.cookies.update({
         '__cfduid': cfduid,
+        'cf_clearance': cfclearance,
     })
 
-    assets = [
-        ('xbt', '/'),
-        #     ('bch', '/bcc'),
-        #     ('btg', '/btg'),
-        ('ltc', '/ltc'),
-        #     ('nmc', '/nmc'),
-        ('xrp', '/xrp'),
-        ('eth', '/eth'),
-        #     ('dash', '/dash'),
-        #     ('zec', '/zec'),
-    ]
+    assets = {
+        'xbt': '/',
+        'bch': '/bcc',
+        'btg': '/btg',
+        'ltc': '/ltc',
+        'nmc': '/nmc',
+        'xrp': '/xrp',
+        'eth': '/eth',
+        'dash': '/dash',
+        'zec': '/zec',
+    }
 
     base_url = 'https://www.altcointrader.co.za'
-    order_book = {}
 
-    for code, path in assets:
-        r = s.get(base_url + path)
-        soup = BeautifulSoup(r.text, "html.parser")
-        asks = []
-        bids = []
+    r = s.get(base_url + assets[coin_code.lower()])
+    soup = BeautifulSoup(r.text, "html.parser")
+    book = []
+
+    if book_type == 'asks':
         for row in soup.select('tr.orderUdSell'):
-            asks.append({
+            book.append({
                 'volume': row.select_one('.orderUdSAm').text,
                 'price': row.select_one('.orderUdSPr').text
             })
 
+    else:
         for row in soup.select('tr.orderUdBuy'):
-            bids.append({
+            book.append({
                 'volume': row.select_one('.orderUdBAm').text,
                 'price': row.select_one('.orderUdBPr').text
             })
 
-        order_book.update({code: {
-            'timestamp': int(time.time() * 1000),
-            'asks': asks,
-            'bids': bids,
-        }})
-    return order_book
+    df = pd.DataFrame(book)
+
+    return df
